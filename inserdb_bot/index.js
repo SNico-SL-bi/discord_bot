@@ -17,22 +17,39 @@ client.on('ready', () => {
 });
 
 client.on('messageCreate', async (message) => {
-  if (message.author.bot || !message.mentions.has(client.user)) return;
+  console.log(`📨 Nhận tin nhắn từ ${message.author.tag}: ${message.content}`);
 
-  const attachment = message.attachments.first();
-  if (!attachment || !attachment.name.endsWith('.csv')) {
-    message.reply('❌ Vui lòng đính kèm 1 file CSV.');
+  if (message.author.bot) return;
+
+  const hasAttachment = message.attachments.size > 0;
+  const isMentioned = message.mentions.has(client.user);
+
+  if (!hasAttachment && isMentioned) {
+    message.reply('❌ Bạn cần đính kèm file .csv để xử lý.');
     return;
   }
 
-  try {
-    await axios.post(process.env.WEBHOOK_URL, {
-      file_url: attachment.url
-    });
-    message.reply('📤 File đã được gửi đến hệ thống xử lý.');
-  } catch (err) {
-    console.error(err);
-    message.reply('❌ Gửi webhook thất bại: ' + err.message);
+  if (hasAttachment && isMentioned) {
+    const attachment = message.attachments.first();
+
+    if (!attachment.name.endsWith('.csv')) {
+      message.reply('⚠️ File phải là định dạng `.csv`.');
+      return;
+    }
+
+    console.log('📥 Nhận file CSV:', attachment.url);
+
+    try {
+      const response = await axios.post(process.env.WEBHOOK_URL, {
+        file_url: attachment.url
+      });
+
+      console.log('✅ Đã gửi file tới webhook:', response.status);
+      message.reply('✅ File đã được gửi đến hệ thống xử lý.');
+    } catch (err) {
+      console.error('❌ Lỗi khi gửi webhook:', err.message);
+      message.reply('❌ Gửi file đến hệ thống thất bại.');
+    }
   }
 });
 
