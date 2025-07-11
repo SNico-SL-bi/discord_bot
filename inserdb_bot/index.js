@@ -1,8 +1,16 @@
-import { Client, GatewayIntentBits } from 'discord.js';
+import {
+  Client,
+  GatewayIntentBits,
+  ActionRowBuilder,
+  ButtonBuilder,
+  ButtonStyle
+} from 'discord.js';
 import axios from 'axios';
 import dotenv from 'dotenv';
 
 dotenv.config();
+
+const pendingUploads = new Map();
 
 const client = new Client({
   intents: [
@@ -39,17 +47,58 @@ client.on('messageCreate', async (message) => {
 
     console.log('📥 Nhận file CSV:', attachment.url);
 
-    try {
-      const response = await axios.post(process.env.WEBHOOK_URL, {
-        file_url: attachment.url
-      });
+    const row = new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setCustomId('option_a')
+        .setLabel('Option A')
+        .setStyle(ButtonStyle.Primary),
+      new ButtonBuilder()
+        .setCustomId('option_b')
+        .setLabel('Option B')
+        .setStyle(ButtonStyle.Secondary)
+    );
 
-      console.log('✅ Đã gửi file tới webhook:', response.status);
-      message.reply('✅ File đã được gửi đến hệ thống xử lý.');
-    } catch (err) {
-      console.error('❌ Lỗi khi gửi webhook:', err.message);
-      message.reply('❌ Gửi file đến hệ thống thất bại.');
-    }
+    const reply = await message.reply({
+      content: '📑 Chọn phương án xử lý file:',
+      components: [row]
+    });
+
+    pendingUploads.set(reply.id, attachment.url);
+  }
+});
+
+client.on('interactionCreate', async (interaction) => {
+  if (!interaction.isButton()) return;
+
+  const fileUrl = pendingUploads.get(interaction.message.id);
+  if (!fileUrl) {
+    await interaction.reply({
+      content: '❌ Không tìm thấy dữ liệu để xử lý.',
+      ephemeral: true
+    });
+    return;
+  }
+
+  try {
+    await axios.post(process.env.WEBHOOK_URL, {
+      file_url: fileUrl,
+      choice: interaction.customId,
+      user: interaction.user.id
+    });
+
+    await interaction.reply({
+      content: '✅ Dữ liệu đã được gửi đến hệ thống.',
+      ephemeral: true
+    });
+    await interaction.message.edit({ components: [] });
+  } catch (err) {
+    console.error('❌ Lỗi khi gửi webhook:', err.message);
+    await interaction.reply({
+      content: '❌ Gửi dữ liệu thất bại.',
+      ephemeral: true
+    });
+  } finally {
+    pendingUploads.delete(interaction.message.id);
   }
 });
 
