@@ -1,16 +1,8 @@
-import {
-  Client,
-  GatewayIntentBits,
-  ActionRowBuilder,
-  ButtonBuilder,
-  ButtonStyle
-} from 'discord.js';
-import axios from 'axios';
+import { Client, GatewayIntentBits } from 'discord.js';
 import dotenv from 'dotenv';
+import axios from 'axios';
 
 dotenv.config();
-
-const pendingUploads = new Map();
 
 const client = new Client({
   intents: [
@@ -20,85 +12,39 @@ const client = new Client({
   ]
 });
 
-client.on('ready', () => {
-  console.log(`✅ Logged in as ${client.user.tag}`);
+client.once('ready', () => {
+  console.log(`✅ Bot đã chạy: ${client.user.tag}`);
 });
 
 client.on('messageCreate', async (message) => {
-  console.log(`📨 Nhận tin nhắn từ ${message.author.tag}: ${message.content}`);
+  if (message.author.bot || !message.mentions.has(client.user)) return;
 
-  if (message.author.bot) return;
+  const attachment = message.attachments.first();
+  if (!attachment) return message.reply('❌ Vui lòng đính kèm file CSV.');
 
-  const hasAttachment = message.attachments.size > 0;
-  const isMentioned = message.mentions.has(client.user);
+  const filename = attachment.name.toLowerCase();
 
-  if (!hasAttachment && isMentioned) {
-    message.reply('❌ Bạn cần đính kèm file .csv để xử lý.');
-    return;
-  }
+  let type = null;
+  if (filename.includes('brand')) type = 'brand';
+  else if (filename.includes('keyword')) type = 'keyword';
+  else if (filename.includes('domain')) type = 'domain';
 
-  if (hasAttachment && isMentioned) {
-    const attachment = message.attachments.first();
-
-    if (!attachment.name.endsWith('.csv')) {
-      message.reply('⚠️ File phải là định dạng `.csv`.');
-      return;
-    }
-
-    console.log('📥 Nhận file CSV:', attachment.url);
-
-    const row = new ActionRowBuilder().addComponents(
-      new ButtonBuilder()
-        .setCustomId('option_a')
-        .setLabel('Option A')
-        .setStyle(ButtonStyle.Primary),
-      new ButtonBuilder()
-        .setCustomId('option_b')
-        .setLabel('Option B')
-        .setStyle(ButtonStyle.Secondary)
-    );
-
-    const reply = await message.reply({
-      content: '📑 Chọn phương án xử lý file:',
-      components: [row]
-    });
-
-    pendingUploads.set(reply.id, attachment.url);
-  }
-});
-
-client.on('interactionCreate', async (interaction) => {
-  if (!interaction.isButton()) return;
-
-  const fileUrl = pendingUploads.get(interaction.message.id);
-  if (!fileUrl) {
-    await interaction.reply({
-      content: '❌ Không tìm thấy dữ liệu để xử lý.',
-      ephemeral: true
-    });
-    return;
+  if (!type) {
+    return message.reply('❌ Không xác định được loại file. Tên file phải chứa "brand", "keyword" hoặc "domain".');
   }
 
   try {
-    await axios.post(process.env.WEBHOOK_URL, {
-      file_url: fileUrl,
-      choice: interaction.customId,
-      user: interaction.user.id
+    await axios.post(process.env.N8N_WEBHOOK_URL, {
+      file_url: attachment.url,
+      type,
+      uploaded_by: message.author.username,
+      user_id: message.author.id
     });
 
-    await interaction.reply({
-      content: '✅ Dữ liệu đã được gửi đến hệ thống.',
-      ephemeral: true
-    });
-    await interaction.message.edit({ components: [] });
-  } catch (err) {
-    console.error('❌ Lỗi khi gửi webhook:', err.message);
-    await interaction.reply({
-      content: '❌ Gửi dữ liệu thất bại.',
-      ephemeral: true
-    });
-  } finally {
-    pendingUploads.delete(interaction.message.id);
+    await message.reply(`📤 Đã gửi file đến hệ thống xử lý.\n• Loại: **${type}**`);
+  } catch (error) {
+    console.error('❌ Lỗi gửi webhook:', error.message);
+    await message.reply('❌ Gửi file đến hệ thống thất bại.');
   }
 });
 
