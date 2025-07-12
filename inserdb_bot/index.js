@@ -33,6 +33,8 @@ client.on('messageCreate', async (message) => {
     return message.reply('❌ Không xác định được loại file. Tên file phải chứa "brand", "keyword" hoặc "domain".');
   }
 
+  console.log(`[Webhook URL đang dùng]: ${process.env.N8N_WEBHOOK_URL}`);
+
   try {
     await axios.post(process.env.N8N_WEBHOOK_URL, {
       file_url: attachment.url,
