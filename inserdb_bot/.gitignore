@@ -6,3 +6,7 @@ node_modules/
 
 # macOS system files (tuỳ máy)
 .DS_Store
+
+
+#package-lock
+package-lock.json
